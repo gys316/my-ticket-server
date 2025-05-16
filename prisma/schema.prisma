@@ -14,9 +14,234 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ----------------------------
+// 회원(User) 엔티티
+// ----------------------------
 model User {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  email     String   @unique
-  name      String?
+  id               Int             @id @default(autoincrement())
+  name             String?
+  email            String?         @unique
+  phone            String?         @unique
+  image            String?         // 프로필 이미지 URL
+
+  // soft delete
+  deletedAt        DateTime?
+
+  // OAuth 계정
+  accounts         Account[]       @relation("UserAccounts")
+
+  // 이벤트(모임) 생성 및 관리
+  createdEvents    Event[]         @relation("Creator")
+  adminEvents      Event[]         @relation("EventAdmins")
+
+  // 참가 및 티켓
+  participants     Participant[]
+  tickets          Ticket[]
+
+  // 구독 (향후 사용)
+  subscriptions    Subscription[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+// ----------------------------
+// OAuth 인증 계정(Account) 엔티티
+// ----------------------------
+model Account {
+  id                 Int       @id @default(autoincrement())
+  user               User      @relation("UserAccounts", fields: [userId], references: [id])
+  userId             Int
+  provider           String    // e.g. "google", "kakao"
+  providerAccountId  String    // OAuth 공급자가 부여한 고유 ID
+  accessToken        String?
+  refreshToken       String?
+  expiresAt          Int?
+  tokenType          String?
+  scope              String?
+  idToken            String?
+  sessionState       String?
+
+  // soft delete
+  deletedAt          DateTime?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([provider, providerAccountId])
+}
+
+// ----------------------------
+// 이벤트(Event) 엔티티
+// ----------------------------
+model Event {
+  id               Int             @id @default(autoincrement())
+  name             String
+  description      String?
+  type             EventType
+
+  // soft delete
+  deletedAt        DateTime?
+
+  // 생성자 및 관리자
+  creator          User            @relation("Creator", fields: [creatorId], references: [id])
+  creatorId        Int
+  admins           User[]          @relation("EventAdmins")
+
+  // 참가자, 티켓, 결제
+  participants     Participant[]
+  ticketSettings   TicketSetting[]
+  payments         Payment[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+enum EventType {
+  ONE_TIME
+  RECURRING
+  OTHER
+}
+
+// ----------------------------
+// 참가자(Participant) 엔티티
+// ----------------------------
+model Participant {
+  id               Int             @id @default(autoincrement())
+  event            Event           @relation(fields: [eventId], references: [id])
+  eventId          Int
+  user             User            @relation(fields: [userId], references: [id])
+  userId           Int
+  invitedAt        DateTime        @default(now())
+
+  // soft delete
+  deletedAt        DateTime?
+
+  tickets          Ticket[]
+  payments         Payment[]       // 참가자별 결제 연결
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+// ----------------------------
+// 티켓 설정(TicketSetting) 엔티티
+// ----------------------------
+model TicketSetting {
+  id               Int             @id @default(autoincrement())
+  event            Event           @relation(fields: [eventId], references: [id])
+  eventId          Int
+  logoIconUrl      String?
+  logoText         String?
+
+  // soft delete
+  deletedAt        DateTime?
+
+  tickets          Ticket[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+// ----------------------------
+// 티켓(Ticket) 엔티티
+// ----------------------------
+model Ticket {
+  id               Int             @id @default(autoincrement())
+  participant      Participant     @relation(fields: [participantId], references: [id])
+  participantId    Int
+  ticketSetting    TicketSetting   @relation(fields: [ticketSettingId], references: [id])
+  ticketSettingId  Int
+  sentAt           DateTime        @default(now())
+
+  // soft delete
+  deletedAt        DateTime?
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  User User[]
+}
+
+// ----------------------------
+// 결제(Payment) 엔티티
+//  - 참가자별 과금 기록
+// ----------------------------
+model Payment {
+  id               Int             @id @default(autoincrement())
+  event            Event           @relation(fields: [eventId], references: [id])
+  eventId          Int
+  participant      Participant     @relation(fields: [participantId], references: [id])
+  participantId    Int
+
+  amount           Decimal         @db.Decimal(10,2)  // 과금 금액
+  currency         String          // e.g. "KRW", "USD"
+  status           PaymentStatus   // 결제 상태
+  paidAt           DateTime?       // 결제 완료 시각
+  initiatedAt      DateTime        @default(now())
+
+  // soft delete
+  deletedAt        DateTime?
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ----------------------------
+// 구독 계획(SubscriptionPlan) 엔티티
+//  - 향후 구독형 모델 확장용
+// ----------------------------
+model SubscriptionPlan {
+  id               Int             @id @default(autoincrement())
+  name             String          // 예: "월간 플랜", "연간 플랜"
+  description      String?
+  price            Decimal         @db.Decimal(10,2)
+  currency         String
+  interval         String          // 예: "MONTH", "YEAR"
+  trialPeriodDays  Int?            // 선택적 체험 기간
+
+  // soft delete
+  deletedAt        DateTime?
+
+  subscriptions    Subscription[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+// ----------------------------
+// 구독(Subscription) 엔티티
+//  - 사용자 기반 구독 관리
+// ----------------------------
+model Subscription {
+  id               Int               @id @default(autoincrement())
+  user             User              @relation(fields: [userId], references: [id])
+  userId           Int
+  plan             SubscriptionPlan  @relation(fields: [planId], references: [id])
+  planId           Int
+
+  status           SubscriptionStatus
+  startsAt         DateTime
+  endsAt           DateTime?
+  cancelAtPeriodEnd Boolean         @default(false)
+
+  // soft delete
+  deletedAt        DateTime?
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
 }
