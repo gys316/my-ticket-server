@@ -9,6 +9,12 @@ generator client {
   output   = "../generated/prisma"
 }
 
+generator markdown {
+  provider = "prisma-markdown"
+  output   = "./ERD.md"
+  title    = "My Ticket"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -18,83 +24,88 @@ datasource db {
 // 회원(User) 엔티티
 // ----------------------------
 model User {
-  id               Int             @id @default(autoincrement())
-  name             String?
-  email            String?         @unique
-  phone            String?         @unique
-  image            String?         // 프로필 이미지 URL
 
-  // soft delete
-  deletedAt        DateTime?
+  id    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name  String
+  email String  @unique
+  phone String? @unique
+  // 이미지
+  image String?
 
   // OAuth 계정
-  accounts         Account[]       @relation("UserAccounts")
+  accounts Account[] @relation("UserAccounts")
 
   // 이벤트(모임) 생성 및 관리
-  createdEvents    Event[]         @relation("Creator")
-  adminEvents      Event[]         @relation("EventAdmins")
+  createdEvents Event[] @relation("Creator")
+  adminEvents   Event[] @relation("EventAdmins")
 
   // 참가 및 티켓
-  participants     Participant[]
-  tickets          Ticket[]
+  participants Participant[]
+  tickets      Ticket[]
 
   // 구독 (향후 사용)
-  subscriptions    Subscription[]
+  // subscriptions    Subscription[]
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("tb_users")
 }
 
 // ----------------------------
 // OAuth 인증 계정(Account) 엔티티
 // ----------------------------
 model Account {
-  id                 Int       @id @default(autoincrement())
-  user               User      @relation("UserAccounts", fields: [userId], references: [id])
-  userId             Int
-  provider           String    // e.g. "google", "kakao"
-  providerAccountId  String    // OAuth 공급자가 부여한 고유 ID
-  accessToken        String?
-  refreshToken       String?
-  expiresAt          Int?
-  tokenType          String?
-  scope              String?
-  idToken            String?
-  sessionState       String?
 
-  // soft delete
-  deletedAt          DateTime?
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user              User    @relation("UserAccounts", fields: [userId], references: [id])
+  userId            String  @map("user_id") @db.Uuid
+  provider          String // e.g. "google", "kakao"
+  providerAccountId String  @map("provider_account_id") // OAuth 공급자가 부여한 고유 ID 
+  accessToken       String? @map("access_token")
+  refreshToken      String? @map("refresh_token")
+  expiresAt         Int?    @map("expires_at")
+  tokenType         String? @map("token_type")
+  scope             String?
+  idToken           String? @map("id_token")
+  sessionState      String? @map("session_state")
 
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@unique([provider, providerAccountId])
+  @@map("tb_accounts")
 }
 
 // ----------------------------
 // 이벤트(Event) 엔티티
 // ----------------------------
 model Event {
-  id               Int             @id @default(autoincrement())
-  name             String
-  description      String?
-  type             EventType
 
-  // soft delete
-  deletedAt        DateTime?
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  description    String
+  type           EventType
+  thumbnailUrl   String?   @map("thumbnail_url")
+  maxTicketCount Int       @map("max_ticket_count")
 
   // 생성자 및 관리자
-  creator          User            @relation("Creator", fields: [creatorId], references: [id])
-  creatorId        Int
-  admins           User[]          @relation("EventAdmins")
+  creator   User   @relation("Creator", fields: [creatorId], references: [id])
+  creatorId String @map("creator_id") @db.Uuid
+  admins    User[] @relation("EventAdmins")
 
   // 참가자, 티켓, 결제
-  participants     Participant[]
-  ticketSettings   TicketSetting[]
-  payments         Payment[]
+  participants   Participant[]
+  ticketSettings TicketSetting[]
+  payments       Payment[]
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("tb_events")
 }
 
 enum EventType {
@@ -107,84 +118,144 @@ enum EventType {
 // 참가자(Participant) 엔티티
 // ----------------------------
 model Participant {
-  id               Int             @id @default(autoincrement())
-  event            Event           @relation(fields: [eventId], references: [id])
-  eventId          Int
-  user             User            @relation(fields: [userId], references: [id])
-  userId           Int
-  invitedAt        DateTime        @default(now())
 
-  // soft delete
-  deletedAt        DateTime?
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event     Event    @relation(fields: [eventId], references: [id])
+  eventId   String   @map("event_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @map("user_id") @db.Uuid
+  invitedAt DateTime @default(now()) @map("invited_at")
 
-  tickets          Ticket[]
-  payments         Payment[]       // 참가자별 결제 연결
+  // 참가자 정보
+  name     String
+  phone    String?
+  email    String?
+  sendType String  @default("EMAIL") @map("send_type")
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  tickets  Ticket[]
+  payments Payment[] // 참가자별 결제 연결
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("tb_participants")
 }
 
 // ----------------------------
 // 티켓 설정(TicketSetting) 엔티티
 // ----------------------------
 model TicketSetting {
-  id               Int             @id @default(autoincrement())
-  event            Event           @relation(fields: [eventId], references: [id])
-  eventId          Int
-  logoIconUrl      String?
-  logoText         String?
 
-  // soft delete
-  deletedAt        DateTime?
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event          Event   @relation(fields: [eventId], references: [id])
+  eventId        String  @map("event_id") @db.Uuid
+  logoIconUrl    String? @map("logo_icon_url")
+  logoText       String? @map("logo_text")
+  mainImageUrl   String? @map("main_image_url")
+  metaData       Json    @map("meta_data")
+  allowReuseable Boolean @default(true) @map("allow_reuseable")
 
-  tickets          Ticket[]
+  tickets Ticket[]
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("tb_ticket_settings")
 }
 
 // ----------------------------
 // 티켓(Ticket) 엔티티
 // ----------------------------
 model Ticket {
-  id               Int             @id @default(autoincrement())
-  participant      Participant     @relation(fields: [participantId], references: [id])
-  participantId    Int
-  ticketSetting    TicketSetting   @relation(fields: [ticketSettingId], references: [id])
-  ticketSettingId  Int
-  sentAt           DateTime        @default(now())
 
-  // soft delete
-  deletedAt        DateTime?
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  participant     Participant   @relation(fields: [participantId], references: [id])
+  participantId   String        @map("participant_id") @db.Uuid
+  ticketSetting   TicketSetting @relation(fields: [ticketSettingId], references: [id])
+  ticketSettingId String        @map("ticket_setting_id") @db.Uuid
+  sentAt          DateTime      @default(now()) @map("sent_at")
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  User User[]
+  User             User[]
+  TicketSendResult TicketSendResult?
+  TicketUsage      TicketUsage[]
+
+  @@map("tb_tickets")
+}
+
+// ----------------------------
+// 티켓 사용 내역 (TicketUsage) 엔티티
+// ----------------------------
+model TicketUsage {
+
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  ticket   Ticket   @relation(fields: [ticketId], references: [id])
+  ticketId String   @map("ticket_id") @db.Uuid
+  usedAt   DateTime @default(now()) @map("used_at")
+  metadata Json?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([ticketId])
+  @@index([usedAt])
+  @@map("tb_ticket_usages")
+}
+
+// ----------------------------
+// 티켓 발송 결과 (TicketSendResult) 엔티티
+// ----------------------------
+model TicketSendResult {
+
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId String @unique @map("ticket_id") @db.Uuid
+  // 발송 상태 (PENDING, PROCESSING, COMPLETED, FAILED)
+  status   String @default("PENDING")
+
+  // 참가자 정보
+  name     String
+  phone    String?
+  email    String?
+  sendType String  @default("email") @map("send_type")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@map("tb_ticket_send_results")
 }
 
 // ----------------------------
 // 결제(Payment) 엔티티
-//  - 참가자별 과금 기록
 // ----------------------------
 model Payment {
-  id               Int             @id @default(autoincrement())
-  event            Event           @relation(fields: [eventId], references: [id])
-  eventId          Int
-  participant      Participant     @relation(fields: [participantId], references: [id])
-  participantId    Int
 
-  amount           Decimal         @db.Decimal(10,2)  // 과금 금액
-  currency         String          // e.g. "KRW", "USD"
-  status           PaymentStatus   // 결제 상태
-  paidAt           DateTime?       // 결제 완료 시각
-  initiatedAt      DateTime        @default(now())
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event         Event       @relation(fields: [eventId], references: [id])
+  eventId       String      @map("event_id") @db.Uuid
+  participant   Participant @relation(fields: [participantId], references: [id])
+  participantId String      @map("participant_id") @db.Uuid
 
-  // soft delete
-  deletedAt        DateTime?
+  amount      Decimal       @db.Decimal(10, 2) // 과금 금액
+  currency    String // e.g. "KRW", "USD"
+  status      PaymentStatus // 결제 상태
+  paidAt      DateTime?     @map("paid_at") // 결제 완료 시각 
+  initiatedAt DateTime      @default(now()) @map("initated_at")
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("tb_payments")
 }
 
 enum PaymentStatus {
@@ -198,50 +269,50 @@ enum PaymentStatus {
 // 구독 계획(SubscriptionPlan) 엔티티
 //  - 향후 구독형 모델 확장용
 // ----------------------------
-model SubscriptionPlan {
-  id               Int             @id @default(autoincrement())
-  name             String          // 예: "월간 플랜", "연간 플랜"
-  description      String?
-  price            Decimal         @db.Decimal(10,2)
-  currency         String
-  interval         String          // 예: "MONTH", "YEAR"
-  trialPeriodDays  Int?            // 선택적 체험 기간
+// model SubscriptionPlan {
+//   id               Int             @id @default(autoincrement())
+//   name             String          // 예: "월간 플랜", "연간 플랜"
+//   description      String?
+//   price            Decimal         @db.Decimal(10,2)
+//   currency         String
+//   interval         String          // 예: "MONTH", "YEAR"
+//   trialPeriodDays  Int?            // 선택적 체험 기간
 
-  // soft delete
-  deletedAt        DateTime?
+//   // soft delete
+//   deletedAt        DateTime?
 
-  subscriptions    Subscription[]
+//   subscriptions    Subscription[]
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-}
+//   createdAt        DateTime        @default(now())
+//   updatedAt        DateTime        @updatedAt
+// }
 
 // ----------------------------
 // 구독(Subscription) 엔티티
 //  - 사용자 기반 구독 관리
 // ----------------------------
-model Subscription {
-  id               Int               @id @default(autoincrement())
-  user             User              @relation(fields: [userId], references: [id])
-  userId           Int
-  plan             SubscriptionPlan  @relation(fields: [planId], references: [id])
-  planId           Int
+// model Subscription {
+//   id               Int               @id @default(autoincrement())
+//   user             User              @relation(fields: [userId], references: [id])
+//   userId           Int
+//   plan             SubscriptionPlan  @relation(fields: [planId], references: [id])
+//   planId           Int
 
-  status           SubscriptionStatus
-  startsAt         DateTime
-  endsAt           DateTime?
-  cancelAtPeriodEnd Boolean         @default(false)
+//   status           SubscriptionStatus
+//   startsAt         DateTime
+//   endsAt           DateTime?
+//   cancelAtPeriodEnd Boolean         @default(false)
 
-  // soft delete
-  deletedAt        DateTime?
+//   // soft delete
+//   deletedAt        DateTime?
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-}
+//   createdAt        DateTime          @default(now())
+//   updatedAt        DateTime          @updatedAt
+// }
 
-enum SubscriptionStatus {
-  ACTIVE
-  PAST_DUE
-  CANCELED
-  UNPAID
-}
+// enum SubscriptionStatus {
+//   ACTIVE
+//   PAST_DUE
+//   CANCELED
+//   UNPAID
+// }
